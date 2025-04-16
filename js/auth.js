@@ -7,6 +7,9 @@ let isUserLoggedIn = false;
 document.addEventListener('DOMContentLoaded', function() {
   setupAuthDropdown();
   checkAndSetLoginStatus();
+  
+  // 定期验证登录状态
+  setInterval(validateAuthStatus, 60000); // 每分钟检查一次
 });
 
 // 初始化认证下拉菜单功能
@@ -37,6 +40,8 @@ function checkAndSetLoginStatus() {
   if (urlParams.has('login_success')) {
     // 登录成功，保存到localStorage
     localStorage.setItem('user_logged_in', 'true');
+    // 记录登录时间戳，用于验证
+    localStorage.setItem('login_timestamp', Date.now().toString());
     // 移除URL中的参数但不刷新页面
     const newUrl = window.location.pathname + window.location.hash;
     history.replaceState({}, document.title, newUrl);
@@ -46,16 +51,52 @@ function checkAndSetLoginStatus() {
   else if (localStorage.getItem('user_logged_in') === 'true') {
     isUserLoggedIn = true;
   }
-  // 方法3: 检查当前页面路径，如果不是登录页且存在退出按钮，则可能已登录
-  else if (window.location.pathname !== '/login') {
-    // 额外的页面可访问性检查
-    isUserLoggedIn = true;
-    // 保存到localStorage以便后续访问
-    localStorage.setItem('user_logged_in', 'true');
-  }
+  // 方法3已移除：不再简单地根据URL路径判断登录状态
 
   // 更新UI显示
   updateLoginUI();
+}
+
+// 验证登录状态的有效性
+async function validateAuthStatus() {
+  // 如果没有登录状态，无需验证
+  if (!isLoggedIn()) return;
+  
+  try {
+    // 尝试访问根页面，如果被重定向到登录页，说明登录已失效
+    const response = await fetch('/', {
+      method: 'HEAD',
+      redirect: 'manual',
+      cache: 'no-store'
+    });
+    
+    // 如果被重定向到登录页面，清除登录状态
+    if (response.type === 'opaqueredirect' || response.redirected) {
+      // 请求被重定向，可能是登录已失效
+      // 尝试一次完整的页面请求来确认
+      checkFullPageAuth();
+    }
+  } catch (error) {
+    console.error('验证登录状态时出错:', error);
+  }
+}
+
+// 通过XHR请求验证当前页面是否需要重新登录
+function checkFullPageAuth() {
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', '/', true);
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      // 如果响应URL是登录页，说明登录已失效
+      if (xhr.responseURL && xhr.responseURL.includes('/login')) {
+        console.log('登录已失效，需要重新登录');
+        handleLogout();
+        // 页面刷新，会自动跳转到登录页
+        window.location.reload();
+      }
+    }
+  };
+  xhr.send();
 }
 
 // 检查是否已登录
@@ -85,6 +126,7 @@ function updateLoginUI() {
 function handleLogout() {
   // 清除本地存储的登录状态
   localStorage.removeItem('user_logged_in');
+  localStorage.removeItem('login_timestamp');
   isUserLoggedIn = false;
 }
 
