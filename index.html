@@ -345,10 +345,7 @@
                 });
             }
 
-            // 检查用户登录状态并显示/隐藏退出按钮
-            if (window.isLoggedIn && window.isLoggedIn()) {
-                document.getElementById('logoutButton').classList.remove('hidden');
-            }
+            // 登录状态检查移至js/auth.js的checkLoginStatus函数中处理
         });
     </script>
 </body>

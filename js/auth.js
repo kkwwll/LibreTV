@@ -3,6 +3,7 @@
 // 初始化认证相关功能
 document.addEventListener('DOMContentLoaded', function() {
   setupAuthDropdown();
+  checkLoginStatus();
 });
 
 // 初始化认证下拉菜单功能
@@ -31,6 +32,22 @@ function isLoggedIn() {
   return document.cookie.includes('auth=true');
 }
 
+// 检查登录状态并更新UI
+function checkLoginStatus() {
+  const loggedIn = isLoggedIn();
+  const logoutButton = document.getElementById('logoutButton');
+  
+  if (logoutButton) {
+    if (loggedIn) {
+      logoutButton.classList.remove('hidden');
+    } else {
+      logoutButton.classList.add('hidden');
+    }
+  }
+  
+  return loggedIn;
+}
+
 // 跳转到登录页面
 function redirectToLogin() {
   window.location.href = '/login';
@@ -38,5 +55,6 @@ function redirectToLogin() {
 
 // 导出函数
 window.isLoggedIn = isLoggedIn;
+window.checkLoginStatus = checkLoginStatus;
 window.redirectToLogin = redirectToLogin;
 window.toggleAuthDropdown = toggleAuthDropdown; 
