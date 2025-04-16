@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  # 集成了认证服务的LibreTV主应用
+  libretv:
+    image: bestzwei/libretv:latest
+    container_name: libretv
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"       # 静态内容服务在80端口
+    environment:
+      # 设置访问密码，留空则禁用密码保护
+      - ACCESS_PASSWORD=
+      # 会话密钥，建议在生产环境中修改
+      - SESSION_SECRET=libretv-secret-key
+    restart: unless-stopped
+    volumes:
+      # 可选：挂载静态资源目录，方便更新内容
+      - ./js:/usr/share/nginx/html/js
+      # 可选：挂载自定义配置
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s 

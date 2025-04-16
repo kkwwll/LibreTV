@@ -14,6 +14,41 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/styles.css">
     <style>
+        :root {
+            --primary-color: #00ccff;       /* 霓虹蓝主色调 */
+            --primary-light: #33d6ff;       /* 浅霓虹蓝变体 */
+            --secondary-color: #0f1622;     /* 深蓝黑背景色 */
+            --accent-color: #ff3c78;        /* 霓虹粉强调色 */
+            --text-color: #e6f2ff;          /* 柔和的蓝白色文本 */
+            --text-muted: #8599b2;          /* 淡蓝灰色次级文本 */
+            --border-color: rgba(0, 204, 255, 0.15);
+            --page-gradient-start: #0f1622; /* 深蓝黑起始色 */
+            --page-gradient-end: #192231;   /* 深靛蓝结束色 */
+            --card-gradient-start: #121b29; /* 卡片起始色 */
+            --card-gradient-end: #1c2939;   /* 卡片结束色 */
+            --card-accent: rgba(0, 204, 255, 0.12); /* 霓虹蓝卡片强调色 */
+            --card-hover-border: rgba(0, 204, 255, 0.5); /* 悬停边框颜色 */
+        }
+        
+        .page-bg {
+            background: linear-gradient(180deg, var(--page-gradient-start), var(--page-gradient-end));
+            min-height: 100vh;
+            /* 柔和赛博点状背景 */
+            background-image: 
+                linear-gradient(180deg, var(--page-gradient-start), var(--page-gradient-end)),
+                radial-gradient(circle at 25px 25px, rgba(0, 204, 255, 0.04) 2px, transparent 3px),
+                radial-gradient(circle at 75px 75px, rgba(255, 60, 120, 0.02) 1px, transparent 2px),
+                radial-gradient(circle at 50px 50px, rgba(150, 255, 250, 0.015) 1px, transparent 2px);
+            background-blend-mode: normal;
+            background-size: cover, 100px 100px, 50px 50px, 75px 75px;
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, var(--primary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
         .login-box {
             background: rgba(17, 17, 17, 0.8);
             backdrop-filter: blur(10px);
@@ -65,12 +100,12 @@
             <p class="text-gray-400">请输入访问密码以继续</p>
         </div>
         
-        <div id="error-message" class="hidden bg-red-900/50 text-red-200 p-3 rounded-lg mb-4 text-sm"></div>
+        <div id="errorMessage" class="hidden bg-red-900/50 text-red-200 p-3 rounded-lg mb-4 text-sm"></div>
         
-        <form id="login-form" class="space-y-6">
+        <form id="loginForm" class="space-y-6">
             <div>
-                <label for="accessCode" class="block text-sm font-medium text-gray-400 mb-1">访问密码</label>
-                <input type="password" id="accessCode" name="accessCode" 
+                <label for="password" class="block text-sm font-medium text-gray-400 mb-1">访问密码</label>
+                <input type="password" id="password" name="password" 
                        class="login-input w-full px-4 py-3 rounded-lg text-white focus:outline-none" 
                        placeholder="请输入访问密码" required>
             </div>
@@ -80,44 +115,44 @@
                     访问
                 </button>
             </div>
-            
-            <div class="text-center text-sm text-gray-500 mt-4">
-                <p>还没有访问密码？<a id="blog-link" href="#" class="info-link" target="_blank">点击获取</a></p>
-            </div>
         </form>
     </div>
 
-    <!-- 引入配置文件 -->
-    <script src="js/config.js"></script>
-    <!-- 引入身份验证模块 -->
-    <script src="js/auth.js"></script>
-    
     <script>
-        // 如果用户已登录，直接重定向到首页
-        if (isLoggedIn()) {
-            const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || 'index.html';
-            window.location.href = redirectUrl;
-        }
-        
-        // 设置博客链接
-        document.getElementById('blog-link').href = typeof AUTH_CONFIG !== 'undefined' && AUTH_CONFIG.blogPostUrl ? 
-            AUTH_CONFIG.blogPostUrl : 'https://blog.cipheror.com/86701aeddb51';
-        
-        document.getElementById('login-form').addEventListener('submit', function(e) {
-            e.preventDefault();
+        document.getElementById('loginForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
             
-            const accessCode = document.getElementById('accessCode').value;
-            const errorMessage = document.getElementById('error-message');
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('errorMessage');
             
-            // 使用auth.js中的登录函数验证访问密码
-            if (login(accessCode)) {
-                // 登录成功，获取登录前的页面或默认跳转到首页
-                const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || 'index.html';
-                window.location.href = redirectUrl;
-            } else {
-                // 显示错误信息
-                errorMessage.textContent = '访问密码错误，请重试';
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 登录成功，跳转到首页
+                    window.location.href = '/';
+                } else {
+                    // 显示错误信息
+                    errorMessage.textContent = data.message;
+                    errorMessage.classList.remove('hidden');
+                    
+                    // 3秒后隐藏错误信息
+                    setTimeout(() => {
+                        errorMessage.classList.add('hidden');
+                    }, 3000);
+                }
+            } catch (error) {
+                errorMessage.textContent = '登录过程中发生错误，请稍后再试';
                 errorMessage.classList.remove('hidden');
+                console.error('登录错误:', error);
                 
                 // 3秒后隐藏错误信息
                 setTimeout(() => {

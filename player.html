@@ -2,25 +2,10 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LibreTV 播放器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/styles.css">
-    
-    <!-- 引入配置文件 -->
-    <script src="js/config.js"></script>
-    <!-- 引入身份验证模块 -->
-    <script src="js/auth.js"></script>
-    <script>
-        // 在页面加载前检查登录状态
-        if (!isLoggedIn()) {
-            // 未登录，重定向到登录页面
-            window.location.href = 'login.html?redirect=' + encodeURIComponent(window.location.pathname.split('/').pop());
-        }
-    </script>
-    
     <style>
         body, html {
             margin: 0;
@@ -246,6 +231,7 @@
 
     <script src="https://s4.zstatic.net/ajax/libs/hls.js/1.5.6/hls.min.js" integrity="sha256-X1GmLMzVcTBRiGjEau+gxGpjRK96atNczcLBg5w6hKA=" crossorigin="anonymous"></script>
     <script src="https://s4.zstatic.net/ajax/libs/dplayer/1.26.0/DPlayer.min.js" integrity="sha256-OJg03lDZP0NAcl3waC9OT5jEa8XZ8SM2n081Ik953o4=" crossorigin="anonymous"></script>
+    <script src="js/config.js"></script>
     <script>
         // 全局变量
         let currentVideoTitle = '';
@@ -344,11 +330,32 @@
             // 添加页面离开事件监听，保存播放位置
             window.addEventListener('beforeunload', saveCurrentProgress);
 
-            // 添加全屏事件监听
-            document.addEventListener('fullscreenchange', handleFullscreenChange);
-            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-            document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-            document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+            // 新增：页面隐藏（切后台/切标签）时也保存
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'hidden') {
+                    saveCurrentProgress();
+                }
+            });
+
+            // 新增：视频暂停时也保存
+            // 需确保 dp.video 已初始化
+            const waitForVideo = setInterval(() => {
+                if (dp && dp.video) {
+                    dp.video.addEventListener('pause', saveCurrentProgress);
+
+                    // 新增：播放进度变化时节流保存
+                    let lastSave = 0;
+                    dp.video.addEventListener('timeupdate', function() {
+                        const now = Date.now();
+                        if (now - lastSave > 5000) { // 每5秒最多保存一次
+                            saveCurrentProgress();
+                            lastSave = now;
+                        }
+                    });
+
+                    clearInterval(waitForVideo);
+                }
+            }, 200);
         });
 
         // 处理键盘快捷键
@@ -577,7 +584,28 @@
                     }
                 }
             });
-
+            // 全屏模式下锁定横屏
+            dp.on('fullscreen', () => {
+                if (window.screen.orientation && window.screen.orientation.lock) {
+                    window.screen.orientation.lock('landscape')
+                    .then(() => {
+                        console.log('屏幕已锁定为横向模式');
+                    })
+                    .catch((error) => {
+                        console.warn('无法锁定屏幕方向，请手动旋转设备:', error);
+                    });
+                } else {
+                    console.warn('当前浏览器不支持锁定屏幕方向，请手动旋转设备。');
+                }
+            });
+            
+            // 全屏取消时解锁屏幕方向
+            dp.on('fullscreen_cancel', () => {
+                if (window.screen.orientation && window.screen.orientation.unlock) {
+                    window.screen.orientation.unlock();
+                }
+            });
+            
             dp.on('loadedmetadata', function() {
                 document.getElementById('loading').style.display = 'none';
                 videoHasEnded = false; // 视频加载时重置结束标志
@@ -1130,14 +1158,11 @@
         
         // 保存当前播放进度
         function saveCurrentProgress() {
-            if (!dp || !dp.video || dp.video.paused || videoHasEnded) return;
-            
-            // 如果播放进度太短或接近结尾，不保存
+            if (!dp || !dp.video) return;
             const currentTime = dp.video.currentTime;
             const duration = dp.video.duration;
-            
-            if (currentTime < 10 || currentTime > duration * 0.95) return;
-            
+            if (!duration || currentTime < 1) return;
+
             // 在localStorage中保存进度
             const progressKey = `videoProgress_${getVideoId()}`;
             const progressData = {
@@ -1145,10 +1170,34 @@
                 duration: duration,
                 timestamp: Date.now()
             };
-            
             try {
                 localStorage.setItem(progressKey, JSON.stringify(progressData));
-                console.log(`已保存播放进度: ${formatTime(currentTime)} / ${formatTime(duration)}`);
+                // --- 新增：同步更新 viewingHistory 中的进度 ---
+                try {
+                    const historyRaw = localStorage.getItem('viewingHistory');
+                    if (historyRaw) {
+                        const history = JSON.parse(historyRaw);
+                        // 用 title + 集数索引唯一标识
+                        const idx = history.findIndex(item =>
+                            item.title === currentVideoTitle &&
+                            (item.episodeIndex === undefined || item.episodeIndex === currentEpisodeIndex)
+                        );
+                        if (idx !== -1) {
+                            // 只在进度有明显变化时才更新，减少写入
+                            if (
+                                Math.abs((history[idx].playbackPosition || 0) - currentTime) > 2 ||
+                                Math.abs((history[idx].duration || 0) - duration) > 2
+                            ) {
+                                history[idx].playbackPosition = currentTime;
+                                history[idx].duration = duration;
+                                history[idx].timestamp = Date.now();
+                                localStorage.setItem('viewingHistory', JSON.stringify(history));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // 忽略 viewingHistory 更新错误
+                }
             } catch (e) {
                 console.error('保存播放进度失败', e);
             }
@@ -1169,39 +1218,6 @@
         function getVideoId() {
             // 使用视频标题和集数索引作为唯一标识
             return `${encodeURIComponent(currentVideoTitle)}_${currentEpisodeIndex}`;
-        }
-
-        // 处理全屏变化事件
-        function handleFullscreenChange() {
-            // 检查是否已经启用了自动横屏功能
-            const autoLandscape = typeof PLAYER_CONFIG !== 'undefined' && 
-                                 PLAYER_CONFIG.autoLandscapeOnFullscreen !== undefined ? 
-                                 PLAYER_CONFIG.autoLandscapeOnFullscreen : true;
-            
-            if (!autoLandscape) return;
-            
-            // 判断是否进入全屏
-            const isFullScreen = document.fullscreenElement || 
-                                 document.webkitFullscreenElement || 
-                                 document.mozFullScreenElement || 
-                                 document.msFullscreenElement;
-            
-            // 仅对Android设备处理横屏
-            if (/Android/i.test(navigator.userAgent)) {
-                if (isFullScreen) {
-                    // 进入全屏时，尝试切换到横屏
-                    if (screen.orientation && screen.orientation.lock) {
-                        screen.orientation.lock('landscape').catch(function(error) {
-                            console.warn('无法锁定屏幕方向: ', error);
-                        });
-                    }
-                } else {
-                    // 退出全屏时，释放屏幕方向锁定
-                    if (screen.orientation && screen.orientation.unlock) {
-                        screen.orientation.unlock();
-                    }
-                }
-            }
         }
     </script>
 </body>

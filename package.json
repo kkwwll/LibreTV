@@ -1,0 +1,31 @@
+{
+  "name": "libretv",
+  "version": "1.0.3",
+  "description": "LibreTV - 免费在线视频搜索与观看平台",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LibreSpark/LibreTV.git"
+  },
+  "keywords": [
+    "tv",
+    "video",
+    "search",
+    "cms",
+    "player"
+  ],
+  "author": "LibreSpark",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "body-parser": "^1.20.2",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.3.1",
+    "bcrypt": "^5.1.0"
+  }
+} 
